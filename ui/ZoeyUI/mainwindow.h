@@ -20,6 +20,8 @@ public:
 
 private:
     Ui::MainWindow *ui;
+
+    void changeStatus();
     QLabel *titleLable;
     QLabel *statusLabel;
     QPushButton *statusButton;

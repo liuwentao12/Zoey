@@ -27,9 +27,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     setCentralWidget(centralWidget);
 
-    connect(statusButton, &QPushButton::clicked, this, [this]() {
-        statusLabel->setText("Listening...");
-    });
+    connect(statusButton, &QPushButton::clicked, this, &MainWindow::changeStatus);
 }
 
 MainWindow::~MainWindow()
@@ -37,3 +35,8 @@ MainWindow::~MainWindow()
     delete ui;
 }
 
+
+void MainWindow::changeStatus()
+{
+    statusLabel->setText("Listening...");
+}
