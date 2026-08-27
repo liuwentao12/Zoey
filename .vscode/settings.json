@@ -1,0 +1,5 @@
+{
+    "clangd.arguments": [
+        "--compile-commands-dir=/home/radxa/Desktop/Zoey/ui/build-ZoeyUI-Desktop-Debug/.qtc_clangd"
+    ]
+}

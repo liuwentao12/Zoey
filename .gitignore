@@ -1,0 +1,5 @@
+# Qt / CMake build directories
+build/
+build-*/
+ui/build/
+ui/build-*/
