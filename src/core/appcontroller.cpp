@@ -23,4 +23,13 @@ void AppController::startListening()
     emit statusChanged(m_status);
 }
 
+void AppController::setStatus(const QString &status)
+{
+    if(m_status == status)return;
+
+    m_status = status;
+
+    emit statusChanged(m_status);
+}
+
 } // namespace zoey

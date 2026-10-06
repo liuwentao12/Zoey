@@ -16,6 +16,7 @@ public:
 public slots:
     // Demonstration state only; no microphone or inference service is started.
     void startListening();
+    void setStatus(const QString &status);
 
 signals:
     void statusChanged(const QString &status);
