@@ -3,3 +3,19 @@ build/
 build-*/
 ui/build/
 ui/build-*/
+
+# Local IDE settings and CMake presets
+*.user
+*.user.*
+CMakeUserPresets.json
+.idea/
+.vscode/*.local.json
+
+# Machine-specific settings and runtime files
+config/local/
+.env
+.env.*
+!.env.example
+logs/
+data/
+models/

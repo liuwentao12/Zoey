@@ -1,0 +1,12 @@
+{
+  "ai": {
+    "base_url": "http://127.0.0.1:8080/v1",
+    "request_timeout_ms": 60000
+  },
+  "mqtt": {
+    "host": "127.0.0.1",
+    "port": 1883,
+    "client_id": "zoey",
+    "topic_prefix": "zoey/"
+  }
+}
