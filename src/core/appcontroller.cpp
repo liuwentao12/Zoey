@@ -36,11 +36,38 @@ void AppController::sendMessage(const QString &message)
 {
     const QString text = message.trimmed();
 
-    if (text.isEmpty()) {
+    if (text.isEmpty() || m_busy) {
+        return;
+    }
+    setBusy(true);
+    emit messageRequested(text);
+}
+
+bool AppController::isBusy() const
+{
+    return m_busy;
+}
+
+void AppController::setBusy(bool busy)
+{
+    if (m_busy == busy) {
         return;
     }
 
-    emit messageRequested(text);
+    m_busy = busy;
+    emit busyChanged(m_busy);
+}
+
+void AppController::handleReply(const QString &text)
+{
+    setBusy(false);
+    emit replyReceived(text);
+}
+
+void AppController::handleError(const QString &message)
+{
+    setBusy(false);
+    emit errorOccurred(message);
 }
 
 } // namespace zoey

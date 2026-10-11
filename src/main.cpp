@@ -31,12 +31,12 @@ int main(int argc, char *argv[])
 
     QObject::connect(
         &aiClient, &zoey::AiClient::replyReceived,
-        &controller, &zoey::AppController::replyReceived
+        &controller, &zoey::AppController::handleReply
     );
 
     QObject::connect(
         &aiClient, &zoey::AiClient::errorOccurred,
-        &controller, &zoey::AppController::errorOccurred
+        &controller, &zoey::AppController::handleError
     );
     
     

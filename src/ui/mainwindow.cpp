@@ -26,7 +26,6 @@ MainWindow::MainWindow(AppController &controller, QWidget *parent)
     auto *layout = new QVBoxLayout(centralWidget);
     auto *titleLabel = new QLabel(QStringLiteral("Zoey"), centralWidget);
     auto *statusLabel = new QLabel(controller.status(), centralWidget);
-    auto *statusButton = new QPushButton(QStringLiteral("change Status"), centralWidget);
     auto *conversationEdit = new QPlainTextEdit(centralWidget);
     auto *inputEdit = new QLineEdit(centralWidget);
     auto *sendButton = new QPushButton(QStringLiteral("发送"),centralWidget);
@@ -38,19 +37,22 @@ MainWindow::MainWindow(AppController &controller, QWidget *parent)
     conversationEdit->appendPlainText(QStringLiteral("这里将显示对话记录："));
 
     statusLabel->setObjectName(QStringLiteral("statusLabel"));
-    statusButton->setObjectName(QStringLiteral("statusButton"));
 
     layout->addWidget(titleLabel);
     layout->addWidget(statusLabel);
     layout->addWidget(conversationEdit);
-    layout->addWidget(statusButton);
     layout->addLayout(inputLayout);
     setCentralWidget(centralWidget);
 
-    connect(statusButton, &QPushButton::clicked,
-            &controller, &AppController::startListening);
-    connect(&controller, &AppController::statusChanged,
-            statusLabel, &QLabel::setText);
+    auto updateUi = [statusLabel, sendButton, &controller](){
+        const bool busy = controller.isBusy();
+        sendButton->setEnabled(!busy);
+        sendButton->setText(busy ? QStringLiteral("生成中...") : QStringLiteral("发送"));
+        statusLabel->setText(busy ? QStringLiteral("正在生成...") : controller.status());
+    };
+
+    connect(&controller, &AppController::busyChanged, this, updateUi);
+    connect(&controller, &AppController::statusChanged, this, updateUi);
     connect(sendButton, &QPushButton::clicked,
             this, [inputEdit, conversationEdit, &controller]() {
         const QString message = inputEdit->text().trimmed();
