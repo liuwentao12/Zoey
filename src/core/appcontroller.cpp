@@ -32,4 +32,15 @@ void AppController::setStatus(const QString &status)
     emit statusChanged(m_status);
 }
 
+void AppController::sendMessage(const QString &message)
+{
+    const QString text = message.trimmed();
+
+    if (text.isEmpty()) {
+        return;
+    }
+
+    emit messageRequested(text);
+}
+
 } // namespace zoey

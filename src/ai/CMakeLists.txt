@@ -1,6 +1,8 @@
 add_library(zoey_ai STATIC
     modelservice.cpp
     modelservice.h
+    aiclient.cpp
+    aiclient.h
 )
 
 target_include_directories(zoey_ai PUBLIC

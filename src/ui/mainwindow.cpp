@@ -52,18 +52,34 @@ MainWindow::MainWindow(AppController &controller, QWidget *parent)
     connect(&controller, &AppController::statusChanged,
             statusLabel, &QLabel::setText);
     connect(sendButton, &QPushButton::clicked,
-            this,[inputEdit, conversationEdit](){
-                const QString message = inputEdit->text().trimmed();
-                if (message.isEmpty()) {
-                return;
-                }
-                
-                conversationEdit->appendPlainText(
-                    QStringLiteral("你：")+message
-                );
+            this, [inputEdit, conversationEdit, &controller]() {
+        const QString message = inputEdit->text().trimmed();
 
-                inputEdit->clear();
-            });
+        if (message.isEmpty()) {
+            return;
+        }
+
+        conversationEdit->appendPlainText(
+            QStringLiteral("你：") + message
+        );
+
+        inputEdit->clear();
+        controller.sendMessage(message);
+    });
+    connect(&controller, &AppController::replyReceived,
+            this, [conversationEdit](const QString &text) {
+        conversationEdit->appendPlainText(
+            QStringLiteral("Zoey：") + text
+        );
+    });
+
+    connect(&controller, &AppController::errorOccurred,
+            this, [conversationEdit](const QString &message) {
+        conversationEdit->appendPlainText(
+            QStringLiteral("错误：") + message
+        );
+    });
+
 }
 
 } // namespace zoey

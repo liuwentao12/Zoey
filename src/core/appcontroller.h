@@ -14,12 +14,15 @@ public:
     QString status() const;
 
 public slots:
-    // Demonstration state only; no microphone or inference service is started.
     void startListening();
     void setStatus(const QString &status);
+    void sendMessage(const QString &message);
 
 signals:
     void statusChanged(const QString &status);
+    void messageRequested(const QString &message);
+    void replyReceived(const QString &text);
+    void errorOccurred(const QString &message);
 
 private:
     QString m_status = QStringLiteral("System Ready");
