@@ -1,47 +1,95 @@
 # Zoey 架构与开发约定
 
-## 目标与当前范围
+## 当前范围
 
-Zoey 是运行在 ROCK 5 ITX 上的 Qt/C++ 本地 AI 与 IoT 应用。本次整理统一构建入口、源码布局和模块边界，保持基础窗口及状态按钮行为，并修复窗口析构时使用未初始化指针的问题。
+Zoey 是运行在 ROCK 5 ITX 上的 Qt/C++ 本地 AI 与 IoT 应用。目前已实现 Qt 对话界面、应用状态协调、llama-server 自动启动与健康检查，以及单次非流式 HTTP 对话。设备管理、MQTT、工具调用和录音仍属于后续规划。
 
-当前实现只有应用入口、基础窗口与状态协调。AI、设备管理和 MQTT 目录提供开发约定；其服务客户端、设备协议、工具调用均尚未实现。状态 `Listening...` 仍是演示状态，不表示已经启动麦克风或模型推理。
+应用采用 UI、Core、AI 分层，共享模型参数；进程退出状态和窗口初始状态通过控制器同步。
 
 ## 目录职责
 
 | 路径 | 职责 |
 | --- | --- |
-| `CMakeLists.txt` | 项目名称、依赖、构建选项、安装和测试入口 |
-| `CMakePresets.json` | 可共享的 Debug/Release 构建与测试配置 |
-| `src/main.cpp` | 创建应用与模块，连接生命周期，显示主窗口 |
-| `src/ui/` | 窗口、布局与用户交互；当前采用手写 Widgets |
-| `src/core/` | 应用状态和业务协调；不依赖 Qt Widgets |
-| `src/ai/` | 后续实现推理服务客户端、对话请求与响应 |
-| `src/devices/` | 后续实现设备信息、状态、能力与操作 |
-| `src/mqtt/` | 后续实现 MQTT 连接、订阅、发布与消息转换 |
-| `config/` | 可提交的配置示例；本机配置不提交 |
-| `tests/` | 核心行为与界面集成测试 |
-| `docs/` | 架构、开发方式与实施记录 |
-| `build/` | 构建生成文件，不提交 |
+| `CMakeLists.txt` / `CMakePresets.json` | 统一构建入口、依赖、Debug/Release 配置与测试入口 |
+| `src/main.cpp` | 创建配置和模块、连接信号、显示窗口并安排服务启动 |
+| `src/ui/` | 手写 Widgets 窗口、用户输入、状态与对话记录展示 |
+| `src/core/` | 服务状态与对话忙碌状态、请求校验和结果转发；不依赖 Widgets |
+| `src/ai/modelconfig.h` | 共享模型标识、地址、路径及超时参数 |
+| `src/ai/modelservice.h/.cpp` | 本应用创建的 llama-server 进程及加载健康检查 |
+| `src/ai/aiclient.h/.cpp` | HTTP 对话请求、JSON 响应解析与错误返回 |
+| `src/devices/` / `src/mqtt/` | 后续模块的开发约定，目前没有业务实现 |
+| `config/` | 配置示例；当前不由应用读取，本机配置不提交 |
+| `tests/` | 现有核心与界面测试；旧按钮用例尚未适配对话界面 |
+| `docs/` | 架构、开发指南、设计与实施计划 |
+| `build/` | 编译产物，不提交 |
 
-不创建没有调用者的 Manager 类或空 CMake 库。新增功能时，在对应模块中实现最小可运行流程，再添加构建目标。
+不创建没有调用者的 Manager 类、接口层或空 CMake 库。新增功能先实现一个完整流程，再根据实际职责划分模块。
 
-## 当前依赖与生命周期
+## 当前对象与数据流
 
 ```mermaid
 flowchart LR
-    Entry[main.cpp] --> Controller[AppController / Qt Core]
-    Entry --> Window[MainWindow / Qt Widgets]
-    Window -->|用户操作| Controller
-    Controller -->|statusChanged| Window
+    Entry[main.cpp] --> Config[ModelConfig]
+    Entry --> Window[MainWindow]
+    Entry --> Core[AppController]
+    Entry --> Client[AiClient]
+    Entry --> Service[ModelService]
+    Config --> Client
+    Config --> Service
+    Window -->|sendMessage| Core
+    Core -->|messageRequested| Client
+    Client -->|HTTP 对话| Server[llama-server]
+    Client -->|replyReceived / errorOccurred| Core
+    Core -->|状态与结果| Window
+    Service -->|启动 / health / 退出清理| Server
+    Service -->|statusChanged| Core
 ```
 
-`AppController` 持有当前状态，通过 `startListening()` 进入演示状态，并在状态实际变化时发出 `statusChanged`。`MainWindow` 通过构造参数获得控制器引用，显示初始状态、转发按钮操作并订阅状态通知。控制器先创建、后销毁，寿命覆盖窗口；窗口不拥有控制器。
+图中的连线表示对象组装和业务消息流。实际编译依赖为 `Zoey → zoey_core / zoey_ai / Qt Widgets`；`zoey_core` 仅依赖 Qt Core，`zoey_ai` 依赖 Qt Core/Network。Core 与 AI 通过入口中的信号连接协作，不直接相互包含头文件。
 
-控件通过 Qt 父子关系销毁。当前不使用 Designer，因此没有 `Ui::MainWindow` 指针、生成的 `ui_mainwindow.h` 或闲置 `.ui` 文件。未来单个窗口可以改用 Designer，但应同时更新其初始化、资源和构建定义。
+### 一次对话
 
-## 后续业务依赖
+1. 窗口整理输入并展示“你：”，随后调用 `AppController::sendMessage()`。
+2. Core 忽略空消息和忙碌期间的请求，先发出 `busyChanged(true)`，再发出 `messageRequested`。
+3. AiClient 构造单条 user 消息并异步 POST 到 `/v1/chat/completions`。
+4. 网络完成后解析 JSON，成功时取第一个 choice 的 `message.content`，失败时发出对应错误。
+5. Core 在成功和失败两条路径中都先恢复可发送状态，再转发结果；窗口追加回复或错误文字。
 
-建议的数据流：
+界面的聊天记录只是展示内容，每次请求不携带此前输入和回复。当前不支持流式输出、取消请求、自动重试和多轮上下文。
+
+### 服务生命周期
+
+入口在事件循环开始后调用 `ModelService::start()`。QProcess 的 started 信号只表示进程已启动，此时显示“模型加载中…”并请求 `/health`。请求成功且 HTTP 状态为 200 才显示“模型已就绪”。其余结果在进程仍运行时安排下一次检查，检查间隔默认 1000 ms；成功后不再轮询。
+
+QProcess 的错误与退出信号在整个进程生命周期内有效，因此就绪后退出也会更新状态。崩溃错误保留具体原因，健康检查发现进程已停止时直接结束，避免通用停止提示覆盖错误。
+
+尚未设置模型加载的总等待期限，也没有自动重启或就绪后的持续健康检查。窗口不根据服务状态禁止发送；提前发送由现有 HTTP 错误处理返回结果。
+
+### 两个状态维度
+
+`AppController::status()` 保存服务或演示状态，`isBusy()` 表示当前对话是否等待结果，两者独立。生成期间窗口显示“正在生成...”，并禁用发送按钮；后台服务状态仍会更新。生成结束后窗口显示最新保存的服务状态。窗口构造完成时主动刷新一次，以正确显示控制器已有的忙碌状态。
+
+`startListening()` 只通过统一的 `setStatus()` 设置演示文字 `Listening...`，不表示录音已开始。保留这个入口是为了兼容原型调用。
+
+## 对象所有权与退出
+
+`main.cpp` 按配置、ModelService、AiClient、AppController、MainWindow 的顺序创建对象，退出时按逆序销毁；所有模块都先于 QApplication 销毁。窗口对控制器持有非拥有引用，控制器的生命期覆盖窗口。
+
+控件和布局由 Qt 父子关系管理。两个 AI 对象分别拥有自己的 QNetworkAccessManager；ModelService 还拥有 QProcess。QProcess 对象的析构不应代替服务退出策略，因此 ModelService 先 terminate，最多等待 3000 ms，再在必要时 kill 并等待最多 1000 ms。
+
+对进程结束的等待仅用于退出清理。运行期间的网络请求、健康检查和进程启动使用异步信号，不为推理新建线程，也不在窗口回调中等待。
+
+网络 reply 在完成回调中调用 `deleteLater()`，每个结果分支都安排释放。所有捕获窗口控件或服务对象的连接与定时回调都有 QObject context，对象销毁时 Qt 自动断开关联。ModelService 退出清理前还断开进程到自身的状态回调，避免析构时继续发布进程状态。
+
+## 共享参数
+
+ModelConfig 的默认值集中定义在 [modelconfig.h](../src/ai/modelconfig.h)，由入口创建并传给两个 AI 对象；对象保存配置值。进程的模型、主机、端口与 HTTP 请求使用同一个来源，`endpoint()` 用 QUrl 生成各协议路径。
+
+默认目录为用户主目录下的 `llama.cpp`，程序相对路径为 `build/bin/llama-server`。模型标识为 `Qwen/Qwen3-4B-GGUF:Q4_K_M`，地址为 `127.0.0.1:8080`，上下文容量 8192 token，回复上限 128 token。请求传输超时为 180000 ms，健康检查传输超时为 2000 ms；这是传输无数据活动的超时，不是推理或加载流程的总时限。
+
+请求保留 `stream=false` 和 `chat_template_kwargs.enable_thinking=false`。JSON 配置示例尚未接入程序，详细约定见 [配置说明](../config/README.md)。
+
+## 后续扩展边界
 
 ```text
 用户操作 → UI → Core → AI 客户端 → llama-server
@@ -52,23 +100,12 @@ flowchart LR
 AI 工具请求 → Core 校验与分派 → 设备操作 → 执行结果 → AI/UI
 ```
 
-- UI 不直接调用 HTTP、MQTT 或解析设备协议。
-- Core 协调模块；AI 不直接依赖 MQTT，MQTT 不依赖 UI。
-- 设备模块定义状态和操作含义，MQTT 模块负责传输与消息转换。
-- 接入真实设备控制时，Core 负责工具白名单、参数与设备能力校验；将设备确认与命令已发送区分开。
-- AI 和 MQTT 模块依赖 Qt Core/Network 或相应协议库；只在接入时添加所需依赖。
-- `llama-server` 与 Mosquitto 作为独立进程运行，地址通过配置指定。以后若需进程管理，将其与请求客户端分开。
+- UI 不直接拼装 HTTP 请求、MQTT 消息或设备协议。
+- AI 不直接依赖 MQTT，MQTT 不依赖 UI；设备模块负责状态和操作含义。
+- 真实工具控制接入时，Core 校验工具白名单、参数和设备能力，区分命令发送、设备确认与实际执行成功。
+- 只有存在实际替换或测试需要时才增加接口层；阻塞工作确有需要时才增加工作线程。
+- 模型权重、外部 llama.cpp 源码、本机绝对路径和个人 IDE 配置不属于本仓库源码。
 
-## 异步、错误与线程
+## 阅读路线
 
-网络请求使用异步 API，UI 线程不等待推理、网络或进程结束。异步结果通过信号返回 Core，再更新 UI。仅在确有阻塞工作时增加工作线程，并明确对象所属线程及退出清理方式。
-
-新增客户端应提供成功、失败、取消和超时路径；服务不可用时保留可操作界面并显示错误。MQTT 重连、请求取消和设备离线策略在接入对应功能时实现，不在基础架构中假装已支持。
-
-## 构建与扩展
-
-基础依赖为 CMake 3.21+、C++17、Qt 5 或 Qt 6 的 Core/Widgets。测试额外依赖同一 Qt 版本的 Test 组件；可用 `BUILD_TESTING=OFF` 禁用。统一使用根目录构建，`zoey_core` 为核心库，`Zoey` 为应用。
-
-实现第一个 AI 流程时：先完成异步请求、响应与错误处理，再由 Core 暴露业务操作给窗口。实现设备流程时：先明确设备模型和消息格式，再连接 MQTT。新增 `.cpp/.h` 文件需在所属目标的 `CMakeLists.txt` 中显式列出。
-
-应用外部依赖、模型权重、旧构建缓存、本机绝对路径和个人 IDE 配置不属于源码。配置示例当前仅描述约定，程序尚不读取它。
+推荐从 [main.cpp](../src/main.cpp) 看对象组装，再依次阅读 Core、UI、AiClient 和 ModelService；具体阅读路线见 [开发指南](development.md)。

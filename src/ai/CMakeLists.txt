@@ -1,4 +1,5 @@
 add_library(zoey_ai STATIC
+    modelconfig.h
     modelservice.cpp
     modelservice.h
     aiclient.cpp

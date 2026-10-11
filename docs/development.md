@@ -2,7 +2,9 @@
 
 ## 从根目录构建
 
-工具要求：CMake 3.21+、支持 C++17 的编译器、Make、Qt 5 或 Qt 6 的 Core/Widgets 开发组件。执行测试需安装同版本 Qt Test。项目不下载 Qt 或模型，也没有 AI/MQTT 库依赖。
+工具要求：CMake 3.21+、支持 C++17 的编译器、Make、Qt 5 或 Qt 6 的 Core/Widgets/Network 开发组件。执行测试需安装同版本 Qt Test。项目构建不下载 Qt、llama.cpp 或模型，也不依赖 Qt MQTT；运行时 ModelService 的 `-hf` 参数由外部 llama-server 解析，模型缓存由该服务管理。
+
+以下命令供自行构建与运行时使用。
 
 ```bash
 cmake --preset debug
@@ -48,11 +50,24 @@ VS Code 打开 Zoey 根目录。共享设置选择 CMake Presets，clangd 指向
 5. 业务层不链接 Qt Widgets；网络请求不阻塞 UI 线程。
 6. 对状态变化、错误处理、协议转换等真实行为增加测试，在根目录执行 `ctest --preset debug`。
 
-推荐开发顺序：AI 单次异步对话与错误处理 → 对话界面与流式输出 → 设备模型与 MQTT → 工具调用校验和设备执行结果。语音、RAG 和自动化在基础流程稳定后再拆分。
+当前已有单次异步对话和界面错误展示。后续可根据需求依次补充对话历史与流式输出、设备模型与 MQTT、工具调用校验和设备执行结果。语音、RAG 和自动化在基础流程稳定后再拆分。
+
+## 源码阅读与复盘路线
+
+1. [main.cpp](../src/main.cpp)：先看模块创建顺序、共享配置和四条信号连接，理解入口如何组装应用。
+2. [AppController](../src/core/appcontroller.cpp)：沿发送、回复和错误路径看 busy 如何变化，再看状态去重。
+3. [MainWindow](../src/ui/mainwindow.cpp)：看控件所有权、统一刷新 lambda、发送回调和结果展示。
+4. [ModelConfig](../src/ai/modelconfig.h)：定位默认地址、路径、模型及超时；JSON 示例尚未加载。
+5. [AiClient](../src/ai/aiclient.cpp)：按请求构造、异步发送、完成解析阅读，注意每个提前返回与 reply 的释放。
+6. [ModelService](../src/ai/modelservice.cpp)：区分进程启动和模型就绪，再看健康检查重试、进程退出和析构清理。
+
+复盘一次对话时，跟踪 `busyChanged(true) → messageRequested → AI 结果 → busyChanged(false) → Core 转发结果`；检查一次启动时，跟踪 `started → /health → statusChanged`。窗口中的历史记录只用于展示，目前每个 HTTP 请求只携带本次输入。
 
 ## 现有测试
 
 - `appcontroller`：状态变化通知、重复请求不重复通知。
-- `mainwindow`：按钮更新业务状态、外部状态更新界面、已有状态的初始显示、窗口构造关闭与析构。
+- `mainwindow`：包含旧状态按钮用例、外部状态更新界面、已有状态的初始显示、窗口构造关闭与析构。
 
-`Listening...` 当前仅用于维持原型行为；真正接入录音或推理后，需按实际业务更新状态模型与相关测试。
+`mainwindow` 中的旧按钮用例仍查找已移除的 `statusButton`，需要适配当前对话界面。现有测试尚未覆盖 HTTP 对话流程。
+
+`Listening...` 仍是原型演示状态，尚未实现录音；真实推理通过 AiClient 的 HTTP 请求进行，与该入口无关。
