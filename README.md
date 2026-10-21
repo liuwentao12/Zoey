@@ -1,4 +1,61 @@
-# Zoey
+# Zoey — Local AI and IoT Edge Hub
+
+**Experimental, early-stage | C++17 · Qt · ARM Linux · llama.cpp**
+
+Zoey is a desktop application for exploring **on-device AI** on ARM Linux boards such as the ROCK 5 ITX (RK3588). It connects a Qt interface to a locally managed llama.cpp inference server. Its longer-term direction is to connect embedded sensor and actuator nodes through MQTT, but **IoT device integration is not yet implemented**.
+
+## What works today
+
+- Qt desktop interface and asynchronous, single-turn HTTP chat with a local model
+- `ModelService` process management for starting, monitoring, and stopping `llama-server`
+- CMake Debug/Release build presets, module architecture documentation, and a test scaffold
+- Local Qwen3-4B inference via an OpenAI-compatible HTTP endpoint
+
+**Not yet implemented:** streaming chat, conversation context reuse, MQTT broker/device management, AI tool calling, voice input, and RK3588 NPU inference. The UI test still targets a retired widget; do not interpret the current test suite as fully passing.
+
+## System overview
+
+```text
+Qt UI (MainWindow)
+         |
+   AppController
+     /       \
+ModelService  AiClient
+     |          |
+llama-server <-- HTTP
+     |
+ Local GGUF model
+
+Planned (not connected): MQTT Manager -> ESP32 / Zephyr / other IoT nodes
+```
+
+## Build and explore
+
+Requirements: CMake 3.21+, C++17 compiler, Qt 5/6 (Core, Widgets, Network). Qt Test is additionally required for Debug tests. A compatible llama.cpp server binary and local GGUF model are needed for inference.
+
+```bash
+cmake --preset debug
+cmake --build --preset debug --parallel 2
+./build/debug/src/Zoey
+```
+
+To run the existing tests (some UI tests need maintenance):
+
+```bash
+ctest --preset debug
+```
+
+Read [architecture](docs/architecture.md), [development guide](docs/development.md), and [configuration notes](config/README.md) before adapting model paths, ports, or dependencies. The current application does not automatically read the sample config files.
+
+## Contributing and project status
+
+This is a maintainer-led prototype, **not** a production-ready AI assistant or a security-hardened remote-control system. Reproducible bug reports, documentation corrections, platform test results, and small reviewable patches are welcome. Please open a GitHub issue to discuss larger changes before investing in implementation.
+
+No open-source license has yet been selected for the repository. Public visibility alone does not grant reuse or redistribution rights; do not assume a license until the maintainer publishes one. Dependencies and model weights have their own licenses.
+
+---
+
+## 中文项目说明
 
 Zoey 是一个运行在 ROCK 5 ITX 上的本地 AI + IoT 边缘智能中枢，基于 Qt/C++ 开发。
 
