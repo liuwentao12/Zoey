@@ -52,22 +52,31 @@ VS Code 打开 Zoey 根目录。共享设置选择 CMake Presets，clangd 指向
 
 当前已有多轮异步对话、会话裁剪、新对话和界面错误展示。后续可根据需求依次补充流式输出、设备模型与 MQTT、工具调用校验和设备执行结果。语音、RAG 和自动化在基础流程稳定后再拆分。
 
-## 源码阅读与复盘路线
+## 源码阅读与 Review
 
-1. [main.cpp](../src/main.cpp)：先看模块创建顺序、共享配置和四条信号连接，理解入口如何组装应用。
-2. [AppController](../src/core/appcontroller.cpp)：沿发送、回复和错误路径看 busy 如何变化，再看完整问答的保存、预算裁剪和清空。
-3. [MainWindow](../src/ui/mainwindow.cpp)：看控件所有权、统一刷新 lambda、发送回调和结果展示。
-4. [ModelConfig](../src/ai/modelconfig.h)：定位默认地址、路径、模型及超时；JSON 示例尚未加载。
-5. [AiClient](../src/ai/aiclient.cpp)：按请求构造、异步发送、完成解析阅读，注意每个提前返回与 reply 的释放。
-6. [ModelService](../src/ai/modelservice.cpp)：区分进程启动和模型就绪，再看健康检查重试、进程退出和析构清理。
+先打开 [main.cpp](../src/main.cpp)，看对象创建顺序和 `QObject::connect`。这里的连接决定了信号最终进入哪个模块。在 Qt Creator 用 Debug 预设启动，等界面显示“模型已就绪”，发一句“我叫小周”，再问“我叫什么？”。按下表顺序跟踪，第二轮最适合观察历史如何进入 HTTP 请求。
 
-复盘一次对话时，跟踪 `busyChanged(true) → messageAccepted → messageRequested → AI 结果 → busyChanged(false) → Core 转发结果`；检查一次启动时，跟踪 `started → /health → statusChanged`。HTTP 请求携带 Core 裁剪后的历史和本次输入；窗口中的全部展示记录不直接用于构造请求。
+| 阶段 | 断点或观察位置 | 看什么 |
+| --- | --- | --- |
+| 点击发送 | [MainWindow 的发送按钮回调](../src/ui/mainwindow.cpp#L61) | 输入框内容如何交给 Core，以及何时清空 |
+| 组装本轮对话 | [`AppController::sendMessage()`](../src/core/appcontroller.cpp#L63) | `m_pendingMessage`、`m_busy` 和送给模型的 `messages`。第二轮请求应带有第一轮完整问答 |
+| 编码和解析 HTTP | [`AiClient::createRequestBody()`](../src/ai/aiclient.cpp#L38) 与 [`handleFinishedReply()`](../src/ai/aiclient.cpp#L62) | `ChatMessages` 如何变成 JSON，以及网络或解析失败时发出哪个信号 |
+| 更新会话和界面 | [`AppController::handleReply()`](../src/core/appcontroller.cpp#L103) 或 [`handleError()`](../src/core/appcontroller.cpp#L119) | 成功才追加问答，成功和失败都解除忙碌状态 |
+
+服务启动可以单独跟踪。先看 [`ModelService::start()`](../src/ai/modelservice.cpp#L58) 如何用 [`ModelConfig`](../src/ai/modelconfig.h) 拼装启动参数，再看 [`checkHealth()`](../src/ai/modelservice.cpp#L78) 在什么条件下发出“模型已就绪”。界面里的服务状态和生成中的忙碌状态各自更新。
+
+Review 时可以从改动影响的流程往回查：
+
+- **窗口操作**：确认点击发送后由 Core 决定是否接受，界面在收到 `messageAccepted` 后再清空输入。
+- **会话和失败路径**：检查裁剪按完整问答进行。失败的本轮输入不进入历史，忙碌时发第二条消息或点“新对话”都由 Core 拦下。
+- **服务或网络改动**：检查回调的 QObject 生命周期、`QNetworkReply` 的释放，以及成功与错误两条路径是否都能结束本次请求。
+- **MQTT 接入**：先沿用现有组装方式。设备层管理设备状态和命令结果，MQTT 层处理 topic 和收发，Core 协调界面操作。职责和依赖见 [架构文档](architecture.md#后续扩展边界)。
 
 ## 现有测试
 
 - `appcontroller`：状态变化通知、重复请求不重复通知。
-- `mainwindow`：包含旧状态按钮用例、外部状态更新界面、已有状态的初始显示、窗口构造关闭与析构。
+- `mainwindow`：验证发送按钮提交消息并清空输入，以及外部状态更新、初始显示和窗口关闭析构。
 
-`mainwindow` 中的旧按钮用例仍查找已移除的 `statusButton`，需要适配当前对话界面。现有测试尚未覆盖 HTTP 对话流程。
+这些用例可在没有 llama-server 和模型的环境中运行。HTTP 请求和本地推理目前通过上面的手动流程检查。
 
 `Listening...` 仍是原型演示状态，尚未实现录音；真实推理通过 AiClient 的 HTTP 请求进行，与该入口无关。

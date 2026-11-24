@@ -6,25 +6,20 @@ Zoey is a desktop application for exploring **on-device AI** on ARM Linux boards
 
 ## What works today
 
-- Qt desktop interface and asynchronous, single-turn HTTP chat with a local model
+- Qt desktop interface and asynchronous, multi-turn HTTP chat with a local model
 - `ModelService` process management for starting, monitoring, and stopping `llama-server`
 - CMake Debug/Release build presets, module architecture documentation, and a test scaffold
 - Local Qwen3-4B inference via an OpenAI-compatible HTTP endpoint
 
-**Not yet implemented:** streaming chat, conversation context reuse, MQTT broker/device management, AI tool calling, voice input, and RK3588 NPU inference. The UI test still targets a retired widget; do not interpret the current test suite as fully passing.
+**Planned** — streaming chat, MQTT device integration, AI tool calling, voice input, and RK3588 NPU inference.
 
 ## System overview
 
 ```text
-Qt UI (MainWindow)
-         |
-   AppController
-     /       \
-ModelService  AiClient
-     |          |
-llama-server <-- HTTP
-     |
- Local GGUF model
+Chat             MainWindow → AppController → AiClient → llama-server
+Model lifecycle  ModelService → llama-server
+Service status   ModelService → AppController → MainWindow
+Inference        llama-server → local GGUF model
 
 Planned (not connected): MQTT Manager -> ESP32 / Zephyr / other IoT nodes
 ```
@@ -39,7 +34,7 @@ cmake --build --preset debug --parallel 2
 ./build/debug/src/Zoey
 ```
 
-To run the existing tests (some UI tests need maintenance):
+To run the controller and UI tests:
 
 ```bash
 ctest --preset debug
@@ -189,6 +184,4 @@ cmake --build --preset release --parallel 2
 ./build/release/src/Zoey
 ```
 
-开发前请阅读 [架构与模块边界](docs/architecture.md) 和 [开发指南](docs/development.md)。配置约定见 [config/README.md](config/README.md)；示例目前尚未由应用读取。
-
-现有界面测试仍查找旧的 `statusButton`，需后续适配对话界面；详见开发指南。
+首次阅读源码时，可以从 [源码阅读与 Review](docs/development.md#源码阅读与-review) 跟踪一次对话，再对照 [架构与模块边界](docs/architecture.md)。配置约定见 [config/README.md](config/README.md)；示例目前尚未由应用读取。

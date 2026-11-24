@@ -20,7 +20,7 @@ Zoey 是运行在 ROCK 5 ITX 上的 Qt/C++ 本地 AI 与 IoT 应用。目前已�
 | `src/ai/aiclient.h/.cpp` | HTTP 对话请求、JSON 响应解析与错误返回 |
 | `src/devices/` / `src/mqtt/` | 后续模块的开发约定，目前没有业务实现 |
 | `config/` | 配置示例；当前不由应用读取，本机配置不提交 |
-| `tests/` | 现有核心与界面测试；旧按钮用例尚未适配对话界面 |
+| `tests/` | Core 状态、窗口发送操作和窗口生命周期测试 |
 | `docs/` | 架构、开发指南、设计与实施计划 |
 | `build/` | 编译产物，不提交 |
 
@@ -46,7 +46,9 @@ flowchart LR
     Service -->|statusChanged| Core
 ```
 
-图中的连线表示对象组装和业务消息流。实际编译依赖为 `Zoey → zoey_core / zoey_ai / Qt Widgets`；`zoey_core` 仅依赖 Qt Core，`zoey_ai` 依赖 Qt Core/Network。Core 与 AI 通过入口中的信号连接协作，不直接相互包含头文件。
+图中的连线表示对象组装和运行时消息流。例如，`AppController` 发出 `messageRequested`，由 `main.cpp` 中的连接把消息交给 `AiClient`。
+
+从 [CMake 目标](../src/CMakeLists.txt) 看，`Zoey` 包含入口和窗口，链接 `zoey_core`、`zoey_ai` 和 Qt Widgets。`zoey_core` 依赖 Qt Core，`zoey_ai` 依赖 Qt Core 和 Qt Network。Core 和 AI 共享 `ChatMessages` 类型，可以分别编译。
 
 ### 一次对话
 
@@ -113,4 +115,4 @@ AI 工具请求 → Core 校验与分派 → 设备操作 → 执行结果 → A
 
 ## 阅读路线
 
-推荐从 [main.cpp](../src/main.cpp) 看对象组装，再依次阅读 Core、UI、AiClient 和 ModelService；具体阅读路线见 [开发指南](development.md)。
+从 [开发指南的源码阅读与 Review](development.md#源码阅读与-review) 跟踪一次发送和回复，再单独观察模型服务启动。
