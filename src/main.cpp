@@ -19,7 +19,15 @@ int main(int argc, char *argv[])
     const zoey::ModelConfig config;
     zoey::ModelService modelService(config);
     zoey::AiClient aiClient(config);
-    zoey::AppController controller;
+    // 用字节预算保守限制上下文，额外为回复和聊天模板预留空间。
+    // 字节不等于 token；精确的上下文容量仍由模型服务判定。
+    constexpr int chatTemplateReserveTokens = 512;
+    const zoey::ConversationLimits conversationLimits{
+        config.maxHistoryTurns,
+        qMax(0, qMin(config.maxConversationBytes,
+                     config.contextSize - config.maxTokens - chatTemplateReserveTokens))
+    };
+    zoey::AppController controller(conversationLimits);
     zoey::MainWindow window(controller);
 
     // 栈对象按声明的逆序销毁：窗口先于控制器，所有模块先于 QApplication。

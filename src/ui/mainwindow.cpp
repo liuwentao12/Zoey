@@ -25,14 +25,20 @@ MainWindow::MainWindow(AppController &controller, QWidget *parent)
     auto *conversationEdit = new QPlainTextEdit(centralWidget);
     auto *inputEdit = new QLineEdit(centralWidget);
     auto *sendButton = new QPushButton(QStringLiteral("发送"), centralWidget);
+    auto *newConversationButton = new QPushButton(QStringLiteral("新对话"), centralWidget);
     auto *inputLayout = new QHBoxLayout;
     inputLayout->addWidget(inputEdit);
     inputLayout->addWidget(sendButton);
+    inputLayout->addWidget(newConversationButton);
     inputEdit->setPlaceholderText(QStringLiteral("输入消息..."));
     conversationEdit->setReadOnly(true);
     conversationEdit->appendPlainText(QStringLiteral("这里将显示对话记录："));
 
     statusLabel->setObjectName(QStringLiteral("statusLabel"));
+    inputEdit->setObjectName(QStringLiteral("inputEdit"));
+    sendButton->setObjectName(QStringLiteral("sendButton"));
+    newConversationButton->setObjectName(QStringLiteral("newConversationButton"));
+    conversationEdit->setObjectName(QStringLiteral("conversationEdit"));
 
     layout->addWidget(titleLabel);
     layout->addWidget(statusLabel);
@@ -41,9 +47,10 @@ MainWindow::MainWindow(AppController &controller, QWidget *parent)
     setCentralWidget(centralWidget);
 
     // 忙碌时临时显示生成提示；服务状态仍由控制器保存，生成结束后恢复显示。
-    const auto updateUi = [statusLabel, sendButton, &controller]() {
+    const auto updateUi = [statusLabel, sendButton, newConversationButton, &controller]() {
         const bool busy = controller.isBusy();
         sendButton->setEnabled(!busy);
+        newConversationButton->setEnabled(!busy);
         sendButton->setText(busy ? QStringLiteral("生成中...") : QStringLiteral("发送"));
         statusLabel->setText(busy ? QStringLiteral("正在生成...") : controller.status());
     };
@@ -52,17 +59,22 @@ MainWindow::MainWindow(AppController &controller, QWidget *parent)
     connect(&controller, &AppController::busyChanged, this, updateUi);
     connect(&controller, &AppController::statusChanged, this, updateUi);
     connect(sendButton, &QPushButton::clicked,
-            this, [inputEdit, conversationEdit, &controller]() {
-        const QString message = inputEdit->text().trimmed();
-
-        if (message.isEmpty()) {
-            return;
-        }
-
-        // 这里只维护展示记录；模型上下文由 AI 客户端决定。
+            this, [inputEdit, &controller]() {
+        controller.sendMessage(inputEdit->text());
+    });
+    connect(&controller, &AppController::messageAccepted,
+            this, [inputEdit, conversationEdit](const QString &message) {
+        // Core 接受消息后才更新界面；过长或被忽略的输入保留在输入框。
         conversationEdit->appendPlainText(QStringLiteral("你：") + message);
         inputEdit->clear();
-        controller.sendMessage(message);
+    });
+    connect(newConversationButton, &QPushButton::clicked,
+            &controller, &AppController::newConversation);
+    connect(&controller, &AppController::conversationCleared,
+            this, [inputEdit, conversationEdit]() {
+        inputEdit->clear();
+        conversationEdit->clear();
+        conversationEdit->appendPlainText(QStringLiteral("这里将显示对话记录："));
     });
     connect(&controller, &AppController::replyReceived,
             this, [conversationEdit](const QString &text) {

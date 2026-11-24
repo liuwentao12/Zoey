@@ -1,6 +1,7 @@
 add_library(zoey_core STATIC
     appcontroller.cpp
     appcontroller.h
+    ../common/chatmessage.h
 )
 
 target_include_directories(zoey_core PUBLIC ${PROJECT_SOURCE_DIR}/src)

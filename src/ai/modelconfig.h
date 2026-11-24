@@ -17,6 +17,8 @@ struct ModelConfig
 
     int contextSize = 8192; // 服务上下文容量，单位为 token。
     int maxTokens = 128; // 单次回复的 token 上限。
+    int maxHistoryTurns = 8; // 多轮对话保留的完整轮次数。
+    int maxConversationBytes = 4096; // 消息内容的 UTF-8 字节预算，非精确 token 计数。
     int requestTimeoutMs = 180000; // HTTP 传输无数据活动时的超时，单位为毫秒。
     int healthTimeoutMs = 2000;
     int healthRetryIntervalMs = 1000;

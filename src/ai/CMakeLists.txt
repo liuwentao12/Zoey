@@ -4,6 +4,7 @@ add_library(zoey_ai STATIC
     modelservice.h
     aiclient.cpp
     aiclient.h
+    ../common/chatmessage.h
 )
 
 target_include_directories(zoey_ai PUBLIC

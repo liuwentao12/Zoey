@@ -1,6 +1,6 @@
 # AI 接入模块
 
-当前已实现模型进程管理与单次非流式对话，依赖 Qt Core/Network。
+当前已实现模型进程管理与非流式对话传输，支持发送 Core 提供的多轮上下文，依赖 Qt Core/Network。
 
 | 文件 | 职责 |
 | --- | --- |
@@ -18,10 +18,10 @@
 
 ## 一次对话
 
-`sendMessage()` 发起 `POST /v1/chat/completions`，`createRequestBody()` 组织 JSON，`handleFinishedReply()` 处理结束结果。请求保留 `stream=false`、回复上限 128 token，以及关闭 thinking 的模板参数。每次只发送当前一条 user 消息，UI 记录不等于模型上下文。
+`sendMessage()` 接收共享类型 `ChatMessages`，发起 `POST /v1/chat/completions`；`createRequestBody()` 将 user/assistant 消息转换为 JSON，`handleFinishedReply()` 处理结束结果。请求保留 `stream=false`、回复上限 128 token，以及关闭 thinking 的模板参数。历史保存、裁剪与清空由 Core 负责，AiClient 不保存会话状态；共享类型位于 `src/common/chatmessage.h`。
 
 成功发出 `replyReceived(text)`；网络失败、非法 JSON、缺少 choices 或回复文字时发出 `errorOccurred(message)`。每个完成回调只发出一个终结结果，并安排 reply 延迟释放。Core 根据结果解除忙碌状态，AI 模块自身不控制按钮或业务状态。
 
-当前尚未实现取消、流式输出、多轮上下文、服务自动重启、加载总超时或工具调用。后续工具请求应交给 Core 校验与分派，不能从 AI 模块直接执行设备控制。
+当前尚未实现取消、流式输出、服务自动重启、加载总超时或工具调用。后续工具请求应交给 Core 校验与分派，不能从 AI 模块直接执行设备控制。
 
 详细数据流、所有权和阅读路线见 [架构文档](../../docs/architecture.md)。

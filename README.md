@@ -102,7 +102,7 @@ MainWindow → AppController → AiClient → llama-server
 - llama.cpp 推理服务
 - 本地 HTTP API
 - 自动启动模型服务、加载健康检查和进程退出状态通知
-- 单次非流式对话、忙碌提示和请求错误展示
+- 多轮非流式对话、上下文裁剪、新对话、忙碌提示和请求错误展示
 - 后续规划：MQTT IoT 节点接入、设备状态管理、AI 获取设备信息和 Tool Calling
 - 后续规划：语音、RAG、自动化和 RK3588 NPU 加速
 
@@ -152,6 +152,7 @@ Zoey/
 ├── CMakePresets.json       # Debug / Release 构建配置
 ├── src/
 │   ├── main.cpp            # 程序入口与模块组装
+│   ├── common/             # Core 与 AI 共享的对话数据类型
 │   ├── ui/                 # 窗口与用户交互
 │   ├── core/               # 应用状态与业务协调
 │   ├── ai/                 # 模型参数、进程管理与 HTTP 对话客户端
@@ -163,7 +164,9 @@ Zoey/
 └── build/                  # 编译产物（不提交）
 ```
 
-当前仓库已实现 Qt 对话界面、`AppController` 协调、llama-server 自动启动和异步 HTTP 对话。每次请求只发送本次输入，界面的聊天记录不会成为下一次请求的模型上下文。设备与 MQTT 目录仍只有开发约定；`startListening()` 保留为原型演示入口，尚未实现录音。
+当前仓库已实现 Qt 对话界面、`AppController` 协调、llama-server 自动启动和异步多轮 HTTP 对话。Core 保存成功的 user/assistant 问答，每次请求携带保留的历史和本次输入；失败请求不加入历史。“新对话”清空模型上下文和界面记录，生成期间不可清空。设备与 MQTT 目录仍只有开发约定；`startListening()` 保留为原型演示入口，尚未实现录音。
+
+历史默认最多保留 8 个完整轮次，消息内容默认采用 4096 个 UTF-8 字节预算；空间不足时按最旧轮次裁剪，单条输入过长则提示缩短并保留输入框内容。字节预算不是精确的 token 计数，实际容量仍由模型服务判定；详见 [配置说明](config/README.md)。会话仅在本次运行内保存。
 
 默认模型、服务地址、路径及超时统一位于 [ModelConfig](src/ai/modelconfig.h)。服务就绪前发送消息仍会走 HTTP 请求及错误处理；尚未实现对话取消、服务自动重启和流式输出。
 

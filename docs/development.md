@@ -50,18 +50,18 @@ VS Code 打开 Zoey 根目录。共享设置选择 CMake Presets，clangd 指向
 5. 业务层不链接 Qt Widgets；网络请求不阻塞 UI 线程。
 6. 对状态变化、错误处理、协议转换等真实行为增加测试，在根目录执行 `ctest --preset debug`。
 
-当前已有单次异步对话和界面错误展示。后续可根据需求依次补充对话历史与流式输出、设备模型与 MQTT、工具调用校验和设备执行结果。语音、RAG 和自动化在基础流程稳定后再拆分。
+当前已有多轮异步对话、会话裁剪、新对话和界面错误展示。后续可根据需求依次补充流式输出、设备模型与 MQTT、工具调用校验和设备执行结果。语音、RAG 和自动化在基础流程稳定后再拆分。
 
 ## 源码阅读与复盘路线
 
 1. [main.cpp](../src/main.cpp)：先看模块创建顺序、共享配置和四条信号连接，理解入口如何组装应用。
-2. [AppController](../src/core/appcontroller.cpp)：沿发送、回复和错误路径看 busy 如何变化，再看状态去重。
+2. [AppController](../src/core/appcontroller.cpp)：沿发送、回复和错误路径看 busy 如何变化，再看完整问答的保存、预算裁剪和清空。
 3. [MainWindow](../src/ui/mainwindow.cpp)：看控件所有权、统一刷新 lambda、发送回调和结果展示。
 4. [ModelConfig](../src/ai/modelconfig.h)：定位默认地址、路径、模型及超时；JSON 示例尚未加载。
 5. [AiClient](../src/ai/aiclient.cpp)：按请求构造、异步发送、完成解析阅读，注意每个提前返回与 reply 的释放。
 6. [ModelService](../src/ai/modelservice.cpp)：区分进程启动和模型就绪，再看健康检查重试、进程退出和析构清理。
 
-复盘一次对话时，跟踪 `busyChanged(true) → messageRequested → AI 结果 → busyChanged(false) → Core 转发结果`；检查一次启动时，跟踪 `started → /health → statusChanged`。窗口中的历史记录只用于展示，目前每个 HTTP 请求只携带本次输入。
+复盘一次对话时，跟踪 `busyChanged(true) → messageAccepted → messageRequested → AI 结果 → busyChanged(false) → Core 转发结果`；检查一次启动时，跟踪 `started → /health → statusChanged`。HTTP 请求携带 Core 裁剪后的历史和本次输入；窗口中的全部展示记录不直接用于构造请求。
 
 ## 现有测试
 

@@ -19,14 +19,14 @@ AiClient::AiClient(const ModelConfig &config, QObject *parent)
     // NetworkAccessManager 是 Qt 子对象，由客户端析构时统一释放。
 }
 
-void AiClient::sendMessage(const QString &message)
+void AiClient::sendMessage(const ChatMessages &messages)
 {
     QNetworkRequest request{m_config.endpoint(QStringLiteral("/v1/chat/completions"))};
     request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
     request.setTransferTimeout(m_config.requestTimeoutMs);
 
     const QByteArray requestData =
-        QJsonDocument(createRequestBody(message)).toJson(QJsonDocument::Compact);
+        QJsonDocument(createRequestBody(messages)).toJson(QJsonDocument::Compact);
     QNetworkReply *reply = m_networkManager->post(request, requestData);
 
     // this 作为回调 context：客户端销毁后不会再执行该回调。
@@ -35,19 +35,20 @@ void AiClient::sendMessage(const QString &message)
     });
 }
 
-QJsonObject AiClient::createRequestBody(const QString &message) const
+QJsonObject AiClient::createRequestBody(const ChatMessages &messages) const
 {
-    QJsonObject userMessage;
-    userMessage["role"] = QStringLiteral("user");
-    userMessage["content"] = message;
-
-    // 界面的聊天记录仅用于展示；目前每次请求只发送这一条 user 消息。
-    QJsonArray messages;
-    messages.append(userMessage);
+    QJsonArray jsonMessages;
+    for (const ChatMessage &message : messages) {
+        QJsonObject jsonMessage;
+        jsonMessage["role"] = message.role == ChatMessage::Role::User
+            ? QStringLiteral("user") : QStringLiteral("assistant");
+        jsonMessage["content"] = message.content;
+        jsonMessages.append(jsonMessage);
+    }
 
     QJsonObject body;
     body["model"] = m_config.modelId;
-    body["messages"] = messages;
+    body["messages"] = jsonMessages;
     body["stream"] = false;
     body["max_tokens"] = m_config.maxTokens;
 

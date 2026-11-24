@@ -2,7 +2,7 @@
 
 ## 当前范围
 
-Zoey 是运行在 ROCK 5 ITX 上的 Qt/C++ 本地 AI 与 IoT 应用。目前已实现 Qt 对话界面、应用状态协调、llama-server 自动启动与健康检查，以及单次非流式 HTTP 对话。设备管理、MQTT、工具调用和录音仍属于后续规划。
+Zoey 是运行在 ROCK 5 ITX 上的 Qt/C++ 本地 AI 与 IoT 应用。目前已实现 Qt 对话界面、应用状态协调、llama-server 自动启动与健康检查，以及多轮非流式 HTTP 对话。设备管理、MQTT、工具调用仍属于后续规划。
 
 应用采用 UI、Core、AI 分层，共享模型参数；进程退出状态和窗口初始状态通过控制器同步。
 
@@ -12,8 +12,9 @@ Zoey 是运行在 ROCK 5 ITX 上的 Qt/C++ 本地 AI 与 IoT 应用。目前已�
 | --- | --- |
 | `CMakeLists.txt` / `CMakePresets.json` | 统一构建入口、依赖、Debug/Release 配置与测试入口 |
 | `src/main.cpp` | 创建配置和模块、连接信号、显示窗口并安排服务启动 |
+| `src/common/chatmessage.h` | Core 与 AI 共享的消息角色、内容及消息列表，不包含 HTTP 细节 |
 | `src/ui/` | 手写 Widgets 窗口、用户输入、状态与对话记录展示 |
-| `src/core/` | 服务状态与对话忙碌状态、请求校验和结果转发；不依赖 Widgets |
+| `src/core/` | 服务状态与对话忙碌状态、请求校验、会话历史与裁剪、结果转发；不依赖 Widgets |
 | `src/ai/modelconfig.h` | 共享模型标识、地址、路径及超时参数 |
 | `src/ai/modelservice.h/.cpp` | 本应用创建的 llama-server 进程及加载健康检查 |
 | `src/ai/aiclient.h/.cpp` | HTTP 对话请求、JSON 响应解析与错误返回 |
@@ -49,13 +50,15 @@ flowchart LR
 
 ### 一次对话
 
-1. 窗口整理输入并展示“你：”，随后调用 `AppController::sendMessage()`。
-2. Core 忽略空消息和忙碌期间的请求，先发出 `busyChanged(true)`，再发出 `messageRequested`。
-3. AiClient 构造单条 user 消息并异步 POST 到 `/v1/chat/completions`。
+1. 窗口将输入交给 `AppController::sendMessage()`。
+2. Core 忽略空消息和忙碌期间的请求；过长输入直接返回错误。接受输入后发出 `busyChanged(true)` 和 `messageAccepted`，窗口再展示“你：”并清空输入框。
+3. Core 将保留的完整历史与本次 user 输入组成 `ChatMessages`，通过 `messageRequested` 交给 AiClient，后者转换为 JSON 并异步 POST 到 `/v1/chat/completions`。
 4. 网络完成后解析 JSON，成功时取第一个 choice 的 `message.content`，失败时发出对应错误。
-5. Core 在成功和失败两条路径中都先恢复可发送状态，再转发结果；窗口追加回复或错误文字。
+5. 成功时 Core 将本次输入与 assistant 回复成对加入历史并裁剪；失败时丢弃待提交输入，保留此前成功历史。两条路径均恢复可发送状态并转发结果，窗口追加回复或错误文字。
 
-界面的聊天记录只是展示内容，每次请求不携带此前输入和回复。当前不支持流式输出、取消请求、自动重试和多轮上下文。
+Core 使用 `src/common/chatmessage.h` 中的共享类型保存历史，AI 与 Core 不直接包含彼此的头文件。历史默认保留最近 8 个完整问答，消息内容采用 4096 个 UTF-8 字节预算；发送前为当前输入腾出空间，始终按完整轮次从最旧记录开始裁剪。请求副本的裁剪不影响此前成功历史，只有成功回复才提交新轮次。界面保留全部展示记录，模型只接收预算内的历史。
+
+“新对话”调用 `newConversation()` 清空历史，通过 `conversationCleared` 通知窗口清空记录与输入框。生成期间按钮禁用，Core 也拒绝清空，避免旧回复进入新会话。会话不写入磁盘。当前不支持流式输出、取消请求和自动重试。
 
 ### 服务生命周期
 
@@ -88,6 +91,8 @@ ModelConfig 的默认值集中定义在 [modelconfig.h](../src/ai/modelconfig.h)
 默认目录为用户主目录下的 `llama.cpp`，程序相对路径为 `build/bin/llama-server`。模型标识为 `Qwen/Qwen3-4B-GGUF:Q4_K_M`，地址为 `127.0.0.1:8080`，上下文容量 8192 token，回复上限 128 token。请求传输超时为 180000 ms，健康检查传输超时为 2000 ms；这是传输无数据活动的超时，不是推理或加载流程的总时限。
 
 请求保留 `stream=false` 和 `chat_template_kwargs.enable_thinking=false`。JSON 配置示例尚未接入程序，详细约定见 [配置说明](../config/README.md)。
+
+`maxHistoryTurns` 和 `maxConversationBytes` 分别控制历史轮数与消息内容字节预算。入口取字节预算与 `contextSize - maxTokens - 512` 的非负较小值传给 Core，512 为模板预留量。这是保守估算，字节不等于 token，模型服务仍可能返回上下文容量错误。
 
 ## 后续扩展边界
 
